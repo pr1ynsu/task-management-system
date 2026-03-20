@@ -3,7 +3,7 @@ import prisma from "../utils/prisma";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "secret";
+const JWT_SECRET = process.env.JWT_SECRET as string; // expect env var set
 
 // GENERATE TOKENS
 const generateTokens = (userId: number) => {
@@ -29,8 +29,9 @@ export const register = async (req: Request, res: Response) => {
     });
 
     res.status(201).json({ message: "User registered", user });
-  } catch {
-    res.status(500).json({ message: "Error registering user" });
+  } catch (error) {
+    console.error("Register error:", error);
+    res.status(500).json({ message: "Failed to register user" });
   }
 };
 
@@ -39,7 +40,10 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ 
+      where: { email },
+      select: { id: true, password: true, refreshToken: true }
+    });
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -54,8 +58,9 @@ export const login = async (req: Request, res: Response) => {
     });
 
     res.json({ accessToken, refreshToken });
-  } catch {
-    res.status(500).json({ message: "Login error" });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Failed to login" });
   }
 };
 
@@ -71,6 +76,7 @@ export const refresh = async (req: Request, res: Response) => {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
+      select: { id: true, refreshToken: true }
     });
 
     if (!user || user.refreshToken !== refreshToken) {
@@ -85,8 +91,9 @@ export const refresh = async (req: Request, res: Response) => {
     });
 
     res.json(tokens);
-  } catch {
-    res.status(403).json({ message: "Token expired" });
+  } catch (error) {
+    console.error("Refresh token error:", error);
+    res.status(403).json({ message: "Token expired or invalid" });
   }
 };
 

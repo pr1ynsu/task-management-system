@@ -6,17 +6,22 @@ import { AuthRequest } from "../middleware/authMiddleware";
 export const createTask = async (req: AuthRequest, res: Response) => {
   try {
     const { title } = req.body;
+    // quick check to avoid empty input
+    if (!title?.trim()) {
+      return res.status(400).json({ message: "Task title is required" });
+    }
 
     const task = await prisma.task.create({
       data: {
-        title,
+        title: title.trim(),
         userId: req.userId!,
       },
     });
 
     res.status(201).json(task);
-  } catch {
-    res.status(500).json({ message: "Error creating task" });
+  } catch (error) {
+    console.error("Create task error:", error);
+    res.status(500).json({ message: "Failed to create task" });
   }
 };
 
@@ -43,8 +48,9 @@ export const getTasks = async (req: AuthRequest, res: Response) => {
     });
 
     res.json(tasks);
-  } catch {
-    res.status(500).json({ message: "Error fetching tasks" });
+  } catch (error) {
+    console.error("Fetch tasks error:", error);
+    res.status(500).json({ message: "Failed to fetch tasks" });
   }
 };
 
@@ -63,8 +69,9 @@ export const getTaskById = async (req: AuthRequest, res: Response) => {
     if (!task) return res.status(404).json({ message: "Task not found" });
 
     res.json(task);
-  } catch {
-    res.status(500).json({ message: "Error fetching task" });
+  } catch (error) {
+    console.error("Fetch task error:", error);
+    res.status(500).json({ message: "Failed to fetch task" });
   }
 };
 
@@ -74,17 +81,37 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { title, completed } = req.body;
 
-    const task = await prisma.task.updateMany({
+    // basic check before update
+    if (title !== undefined && !title?.trim()) {
+      return res.status(400).json({ message: "Title cannot be empty" });
+    }
+
+    // safer single update
+    const task = await prisma.task.findFirst({
       where: {
         id: Number(id),
         userId: req.userId!,
       },
-      data: { title, completed },
     });
 
-    res.json(task);
-  } catch {
-    res.status(500).json({ message: "Error updating task" });
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    const updatedTask = await prisma.task.update({
+      where: {
+        id: Number(id),
+      },
+      data: { 
+        ...(title !== undefined && { title: title.trim() }),
+        ...(completed !== undefined && { completed }),
+      },
+    });
+
+    res.json(updatedTask);
+  } catch (error) {
+    console.error("Update task error:", error);
+    res.status(500).json({ message: "Failed to update task" });
   }
 };
 
@@ -93,16 +120,28 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
 
-    await prisma.task.deleteMany({
+    // check exists first
+    const task = await prisma.task.findFirst({
       where: {
         id: Number(id),
         userId: req.userId!,
       },
     });
 
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    await prisma.task.delete({
+      where: {
+        id: Number(id),
+      },
+    });
+
     res.json({ message: "Task deleted" });
-  } catch {
-    res.status(500).json({ message: "Error deleting task" });
+  } catch (error) {
+    console.error("Delete task error:", error);
+    res.status(500).json({ message: "Failed to delete task" });
   }
 };
 
@@ -123,7 +162,8 @@ export const toggleTask = async (req: AuthRequest, res: Response) => {
     });
 
     res.json(updated);
-  } catch {
-    res.status(500).json({ message: "Error toggling task" });
+  } catch (error) {
+    console.error("Toggle task error:", error);
+    res.status(500).json({ message: "Failed to toggle task" });
   }
 };
